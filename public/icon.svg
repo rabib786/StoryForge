@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#141926" />
+      <stop offset="100%" stop-color="#080a10" />
+    </linearGradient>
+    <linearGradient id="forgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="50%" stop-color="#d97706" />
+      <stop offset="100%" stop-color="#b45309" />
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded squircle -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  <rect width="512" height="512" rx="112" fill="none" stroke="#2a334a" stroke-width="6" />
+
+  <!-- Subtle glow aura -->
+  <circle cx="256" cy="270" r="160" fill="url(#glowGrad)" />
+
+  <!-- Stylized Book & Forge Flame Emblem -->
+  <!-- Open Open Book Pages / Horizon -->
+  <path d="M128 350 C190 320 240 335 256 352 C272 335 322 320 384 350 L384 320 C322 290 272 305 256 322 C240 305 190 290 128 320 Z" fill="#94a3b8" opacity="0.85" />
+  <path d="M128 375 C190 345 240 360 256 376 C272 360 322 345 384 375 L384 356 C322 326 272 341 256 358 C240 341 190 326 128 356 Z" fill="#64748b" opacity="0.5" />
+
+  <!-- Spine / Center Pillar -->
+  <path d="M252 230 L260 230 L260 376 L252 376 Z" fill="#cbd5e1" />
+
+  <!-- Forge Flame / Quill Nib -->
+  <path d="M256 120 C275 165 315 200 315 240 C315 272 288 296 256 296 C224 296 197 272 197 240 C197 200 237 165 256 120 Z" fill="url(#forgeGrad)" />
+  <!-- Inner Flame Core -->
+  <path d="M256 160 C267 190 290 215 290 242 C290 262 274 278 256 278 C238 278 222 262 222 242 C222 215 245 190 256 160 Z" fill="#fef3c7" opacity="0.9" />
+
+  <!-- Sparks / Constellation Stars -->
+  <circle cx="210" cy="170" r="6" fill="#fde68a" />
+  <circle cx="304" cy="180" r="5" fill="#fde68a" />
+  <circle cx="256" cy="100" r="4" fill="#fbbf24" />
+</svg>

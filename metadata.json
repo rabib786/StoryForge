@@ -1,0 +1,7 @@
+{
+  "name": "StoryForge",
+  "description": "Private, mobile-first AI storytelling and roleplay platform",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
