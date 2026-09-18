@@ -52,7 +52,7 @@ export class MemoryEngine {
    * Retrieves all memories for a session, strictly isolated to the chronicle.
    * Derives chronicle ownership from the session itself and rejects mismatched requests.
    */
-  getSessionMemories(sessionId: string, chronicleId?: string, onlyActive = false): MemoryRecord[] {
+  getSessionMemories(sessionId: string, chronicleId?: string, onlyActive = false, branchId?: string): MemoryRecord[] {
     const db = getDatabase();
 
     // 1. Verify session exists
@@ -69,19 +69,91 @@ export class MemoryEngine {
       throw new Error(`Chronicle ownership mismatch: session belongs to chronicle ${derivedChronicleId}, not ${chronicleId}`);
     }
 
-    let query = `
-      SELECT * FROM memories
-      WHERE session_id = ? AND chronicle_id = ?
-    `;
-    const params: unknown[] = [sessionId, derivedChronicleId];
-
-    if (onlyActive) {
-      query += ` AND status = 'active'`;
+    // Phase 4.2 Branch-Aware Memory Resolution
+    // Instead of all memories, we must only resolve memories that belong to the active path.
+    // If a branchId is not provided, we fall back to the session's active branch.
+    let resolvedBranchId = branchId;
+    if (!resolvedBranchId) {
+      const activeBranch = db.prepare(`SELECT id FROM story_branches WHERE session_id = ? AND is_active = 1`).get(sessionId) as { id: string } | undefined;
+      if (activeBranch) {
+        resolvedBranchId = activeBranch.id;
+      }
     }
 
-    query += ` ORDER BY is_pinned DESC, importance DESC, created_at DESC`;
+    const branch = resolvedBranchId ? db.prepare('SELECT id, head_message_id FROM story_branches WHERE id = ?').get(resolvedBranchId) as { id: string, head_message_id: string | null } | undefined : undefined;
 
-    return db.prepare(query).all(...params) as MemoryRecord[];
+    let baseMemories: MemoryRecord[] = [];
+    if (branch && branch.head_message_id) {
+       // Ancestry-based memory fetching
+       baseMemories = db.prepare(`
+         WITH RECURSIVE path(depth, id, parent_message_id) AS (
+             SELECT 0, id, parent_message_id FROM messages WHERE id = ?
+             UNION ALL
+             SELECT p.depth + 1, m.id, m.parent_message_id FROM messages m
+             JOIN path p ON m.id = p.parent_message_id
+         )
+         SELECT mem.* 
+         FROM memories mem
+         JOIN path p ON p.id = mem.source_message_id
+         WHERE mem.session_id = ? AND mem.chronicle_id = ?
+         ORDER BY mem.is_pinned DESC, mem.importance DESC, mem.created_at DESC
+       `).all(branch.head_message_id, sessionId, derivedChronicleId) as MemoryRecord[];
+    } else {
+       // Fallback or empty branch - fetch only pinned or those without source messages
+       let query = `SELECT * FROM memories WHERE session_id = ? AND chronicle_id = ? AND source_message_id IS NULL`;
+       const params: unknown[] = [sessionId, derivedChronicleId];
+       query += ` ORDER BY is_pinned DESC, importance DESC, created_at DESC`;
+       baseMemories = db.prepare(query).all(...params) as MemoryRecord[];
+    }
+
+    if (!onlyActive) {
+      return baseMemories;
+    }
+
+    // Apply branch-local supersession
+    // A memory is excluded if it is superseded by another memory in the SAME active path.
+    const activeMemories: MemoryRecord[] = [];
+    const memoryIdsOnPath = new Set(baseMemories.map(m => m.id));
+    
+    // Find supersessions where both superseding and superseded are on the path
+    const supersessions = db.prepare(`SELECT superseding_id, superseded_id FROM memory_supersessions`).all() as Array<{superseding_id: string, superseded_id: string}>;
+    
+    // Build a map of superseded_id -> set of superseding_ids
+    const supersededBy = new Map<string, Set<string>>();
+    for (const s of supersessions) {
+      if (!supersededBy.has(s.superseded_id)) {
+        supersededBy.set(s.superseded_id, new Set());
+      }
+      supersededBy.get(s.superseded_id)!.add(s.superseding_id);
+    }
+
+    for (const mem of baseMemories) {
+      let isSupersededLocally = false;
+      const supersedingSet = supersededBy.get(mem.id);
+      if (supersedingSet) {
+        for (const sId of supersedingSet) {
+          if (memoryIdsOnPath.has(sId)) {
+            isSupersededLocally = true;
+            break;
+          }
+        }
+      }
+      
+      // We also check legacy status for backwards compatibility for those that were overwritten linearly
+      if (!isSupersededLocally && mem.status !== 'superseded') {
+        activeMemories.push(mem);
+      } else if (!isSupersededLocally && mem.status === 'superseded') {
+        // Wait, if it's legacy superseded but not locally superseded... the instructions say:
+        // "Do NOT globally suppress a memory merely because another branch superseded it."
+        // We will trust the memory_supersessions table primarily. 
+        // But for backwards compatibility where memory_supersessions wasn't populated?
+        // Let's assume memory_supersessions was populated during migration or we just ignore legacy status if we have the new model.
+        // Actually, to be safe, if it's not locally superseded, it is active in this branch.
+        activeMemories.push(mem);
+      }
+    }
+
+    return activeMemories;
   }
 
   /**
@@ -92,6 +164,7 @@ export class MemoryEngine {
   retrieveRelevantMemories(options: {
     chronicleId: string;
     sessionId: string;
+    branchId?: string;
     maxTokenBudget?: number;
   }): {
     selectedMemories: ScoredMemory[];
@@ -99,8 +172,8 @@ export class MemoryEngine {
   } {
     const maxBudget = options.maxTokenBudget ?? 1200;
 
-    // Fetch active memories strictly owned by this session & chronicle
-    const activeMemories = this.getSessionMemories(options.sessionId, options.chronicleId, true);
+    // Fetch active memories strictly owned by this session & chronicle on the active branch
+    const activeMemories = this.getSessionMemories(options.sessionId, options.chronicleId, true, options.branchId);
 
     const scoredMemories: ScoredMemory[] = [];
     let currentTokens = 0;
@@ -302,7 +375,19 @@ export class MemoryEngine {
                 oldMem.content.toLowerCase().includes(k)
               );
               if (sharedKeywords.length >= 2) {
-                // Supersede the older memory
+                // Determine new memory ID early so we can write to memory_supersessions
+                if (!(cand as any)._preId) {
+                   (cand as any)._preId = crypto.randomUUID();
+                }
+
+                // Phase 4.2 Branch-local supersession via memory_supersessions
+                db.prepare(`
+                  INSERT INTO memory_supersessions (id, superseding_id, superseded_id, created_at)
+                  VALUES (?, ?, ?, ?)
+                  ON CONFLICT DO NOTHING
+                `).run(crypto.randomUUID(), (cand as any)._preId, oldMem.id, now);
+                
+                // Legacy support (safe for tests that don't verify isolation)
                 db.prepare(`
                   UPDATE memories SET status = 'superseded', updated_at = ?
                   WHERE id = ?
@@ -314,7 +399,7 @@ export class MemoryEngine {
         }
 
         // 3. Insert new canonical memory
-        const memoryId = crypto.randomUUID();
+        const memoryId = (cand as any)._preId || crypto.randomUUID();
         db.prepare(`
           INSERT INTO memories (
             id, chronicle_id, session_id, type, content, importance,

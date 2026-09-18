@@ -27,13 +27,25 @@ sessionsRouter.get('/:id', (req, res) => {
     }
 
     // Get messages
-    const messages = db.prepare(`
-      SELECT m.*, mg.tokens_used, mg.generation_time_ms, mg.model_id
-      FROM messages m
-      LEFT JOIN message_generations mg ON mg.id = m.active_generation_id
-      WHERE m.session_id = ?
-      ORDER BY m.sequence_order ASC, m.created_at ASC
-    `).all(req.params.id);
+    // Phase 4.2 Legacy Compatibility: Resolve active branch
+    const activeBranch = db.prepare('SELECT id, head_message_id FROM story_branches WHERE session_id = ? AND is_active = 1').get(req.params.id) as { id: string, head_message_id: string | null } | undefined;
+    let messages: any[] = [];
+    if (activeBranch && activeBranch.head_message_id) {
+       messages = db.prepare(`
+         WITH RECURSIVE path(depth, id, parent_message_id, session_id, sender_type, content, is_ooc, active_generation_id, sequence_order, created_at, updated_at) AS (
+             SELECT 0, id, parent_message_id, session_id, sender_type, content, is_ooc, active_generation_id, sequence_order, created_at, updated_at
+             FROM messages WHERE id = ?
+             UNION ALL
+             SELECT p.depth + 1, m.id, m.parent_message_id, m.session_id, m.sender_type, m.content, m.is_ooc, m.active_generation_id, m.sequence_order, m.created_at, m.updated_at
+             FROM messages m
+             JOIN path p ON m.id = p.parent_message_id
+         )
+         SELECT p.*, mg.tokens_used, mg.generation_time_ms, mg.model_id
+         FROM path p
+         LEFT JOIN message_generations mg ON mg.id = p.active_generation_id
+         ORDER BY p.depth DESC
+       `).all(activeBranch.head_message_id);
+    }
 
     // Get chronicle characters
     const storyCharacters = db.prepare(`
@@ -43,6 +55,27 @@ sessionsRouter.get('/:id', (req, res) => {
     `).all(session.chronicle_id);
 
     res.json({ session, messages, storyCharacters });
+  } catch (err: unknown) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Get session branches
+sessionsRouter.get('/:id/branches', (req, res) => {
+  try {
+    const db = getDatabase();
+    const session = db.prepare('SELECT id FROM story_sessions WHERE id = ?').get(req.params.id);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const branches = db.prepare(`
+      SELECT id, session_id, name, head_message_id, is_active, is_archived, created_at, updated_at
+      FROM story_branches
+      WHERE session_id = ?
+    `).all(req.params.id);
+    
+    res.json({ branches });
   } catch (err: unknown) {
     res.status(500).json({ error: String(err) });
   }
@@ -77,13 +110,20 @@ sessionsRouter.post('/', (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?)
       `).run(id, chronicle_id, chatTitle, active_persona_id || null, now, now);
 
+      let msgId = null;
       if (chronicle.opening_message && chronicle.opening_message.trim()) {
-        const msgId = crypto.randomUUID();
+        msgId = crypto.randomUUID();
         db.prepare(`
-          INSERT INTO messages (id, session_id, sender_type, content, is_ooc, sequence_order, created_at, updated_at)
-          VALUES (?, ?, 'ai', ?, 0, 0, ?, ?)
+          INSERT INTO messages (id, session_id, parent_message_id, sender_type, content, is_ooc, sequence_order, created_at, updated_at)
+          VALUES (?, ?, NULL, 'ai', ?, 0, 0, ?, ?)
         `).run(msgId, id, chronicle.opening_message.trim(), now, now);
       }
+      
+      // Phase 4.1/4.2: Ensure new session has an active branch
+      db.prepare(`
+        INSERT INTO story_branches (id, session_id, name, head_message_id, is_active, created_at, updated_at)
+        VALUES (?, ?, 'Main Timeline', ?, 1, ?, ?)
+      `).run(crypto.randomUUID(), id, msgId, now, now);
     })();
 
     const created = db.prepare('SELECT * FROM story_sessions WHERE id = ?').get(id);

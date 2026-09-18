@@ -1,0 +1,777 @@
+=== Starting Phase 4.3 Branch API Test Suite ===
+
+--- 1. Branch Lifecycle ---
+✅ PASS: Session created
+✅ PASS: Main Timeline exists
+✅ PASS: Branch renamed
+✅ PASS: Alternate branch created
+✅ PASS: Two branches exist
+✅ PASS: Exactly one active branch exists
+✅ PASS: New branch is active
+✅ PASS: Branch 1 activated
+✅ PASS: B1 is active
+✅ PASS: B2 is inactive
+✅ PASS: Inactive branch deleted
+✅ PASS: Branch deleted
+
+--- 2. Fork Isolation & Shared Ancestry ---
+✅ PASS: Branch A sees M6A
+✅ PASS: Branch A does not see M6B
+✅ PASS: Branch B sees M6B
+✅ PASS: Branch B does not see M6A
+✅ PASS: Branch A shares M5
+✅ PASS: Branch B shares M5
+
+--- 3. Memory & Supersession Isolation ---
+✅ PASS: Branch A sees Mem A
+✅ PASS: Branch B does not see Mem A
+✅ PASS: Branch A inherits shared mem
+✅ PASS: Branch B inherits shared mem
+✅ PASS: Branch A suppresses old mem
+✅ PASS: Branch A suppresses old mem correctly
+✅ PASS: Branch B still sees original mem
+
+--- 4. Rewind ---
+✅ PASS: Rewind succeeds
+✅ PASS: Active head = M2
+✅ PASS: M3/M4/M5 still exist
+✅ PASS: Auto-save branch points to M6B
+✅ PASS: New path is M1 -> M2 -> M3B
+✅ PASS: Old M3 not in path
+
+--- 5. Edit ---
+✅ PASS: Edit succeeds
+✅ PASS: Message edited
+✅ PASS: Original message remains unchanged
+✅ PASS: Edited message has same parent
+✅ PASS: Active branch moved to edited node
+
+--- 6. Regeneration ---
+✅ PASS: Leaf regenerate succeeds
+✅ PASS: Content updated
+✅ PASS: Message ID unchanged
+✅ PASS: Generation count increased
+✅ PASS: Ancestor regenerate succeeds
+✅ PASS: Ancestor regen created sibling
+✅ PASS: Branch moved to new sibling
+✅ PASS: Original ancestor unchanged
+
+--- 7. Cross-Session Security ---
+✅ PASS: Fork with msg from another session rejected
+✅ PASS: Rewind to msg from another session rejected
+✅ PASS: Edit msg from another session rejected
+✅ PASS: Regen msg from another session rejected
+
+--- 8. Concurrency / Stale Head ---
+✅ PASS: Stale request failed safely
+
+--- 9. Database Integrity ---
+✅ PASS: foreign_key_check = 0 errors
+✅ PASS: integrity_check = ok
+
+=== Branch API Test Results: 51 passed, 0 failed ===
+=== Starting Phase 5.5 Character State Behavioral Context Test Suite ===
+
+--- 1. Context Construction & Formatting ---
+✅ PASS: 1. Dynamic state appears in generation context.
+✅ PASS: 2. Multiple state keys resolve correctly.
+✅ PASS: 3. Multiple characters resolve independently.
+✅ PASS: 4. Static character data remains separate.
+✅ PASS: 5. State formatting is deterministic (alphabetical sorting).
+✅ PASS: 31. Rules contract exists in context.
+\n--- 2. Branch Isolation ---
+✅ PASS: 6. Branch A sees its own state.
+✅ PASS: 7. Branch B sees its own state.
+✅ PASS: 8. Branch A cannot see Branch B state.
+✅ PASS: 9. Branch B cannot see Branch A state.
+✅ PASS: 10. Shared ancestor state is visible to both branches.
+\n--- 3. Rewind & Nullification ---
+✅ PASS: 14. Descendant nullification suppresses it.
+✅ PASS: Future state is visible.
+✅ PASS: 11. Future state disappears after rewind.
+✅ PASS: 13. Non-null ancestor state is visible.
+✅ PASS: 12. Historical database state remains intact after rewind. (15. Nullification does not delete historical records)
+\n--- 4. Consistency ---
+✅ PASS: 16. alive=false is represented correctly.
+✅ PASS: 17. injured=true is represented correctly.
+✅ PASS: 19. Numeric relationship state is represented correctly.
+✅ PASS: 20. Boolean state is represented correctly.
+\n--- 5. Protection ---
+✅ PASS: 21. Canonical Story Character remains unchanged.
+✅ PASS: 22. Persona remains untouched.
+✅ PASS: 23. Chronicle remains untouched.
+✅ PASS: 24. Sibling state cannot contaminate root context.
+\n--- 6. Generation Integration ---
+✅ PASS: Generation A successful
+✅ PASS: 25. Generation receives the correct branch-local character state.
+✅ PASS: 27. A state generated on a shared ancestor is visible to both branches.
+✅ PASS: 26. A state generated on Branch A is not included when generating on Branch B.
+✅ PASS: 28. State-context failure does not destroy the AI message. (Generation fails safely)
+✅ PASS: 29. Existing extraction still runs after successful AI generation.
+✅ PASS: Extraction wrote state
+\n=== Phase 5.5 Behavioral Context Test Results: 31 passed, 0 failed ===
+=== Starting Phase 5.3 Character State Extraction Test Suite ===
+
+--- 1. Valid Extraction ---
+✅ PASS: Explicit injury creates state
+✅ PASS: Injured state persisted correctly
+✅ PASS: Explicit recovery creates null state
+✅ PASS: Injured state nullified correctly
+✅ PASS: Explicit location change creates location state
+✅ PASS: Multiple valid changes are persisted atomically
+\n--- 2. Invalid Extraction ---
+✅ PASS: Malformed JSON rejected
+✅ PASS: Unknown character rejected
+✅ PASS: Cross-Chronicle character rejected
+✅ PASS: Invalid state key rejected
+✅ PASS: Oversized value rejected
+✅ PASS: Unexpected fields ignored securely
+✅ PASS: Conflicting duplicate state entries rejected
+✅ PASS: Duplicate identical entries are normalized
+\n--- 3. Hallucination Protection ---
+✅ PASS: Unstated state change produces no state (Enforced by Prompt/Mock)
+✅ PASS: Speculative future event produces no state (Enforced by Prompt/Mock)
+✅ PASS: Canonical personality repetition produces no state (Enforced by Prompt/Mock)
+✅ PASS: New character mentioned in narrative is not automatically created (Enforced by Character ID validation)
+\n--- 4. Branch Isolation ---
+✅ PASS: State extracted from Branch B is visible on Branch B
+✅ PASS: Same state is invisible on divergent Branch A
+✅ PASS: Shared ancestor state remains inherited
+\n--- 5. Rewind ---
+✅ PASS: Extracted future state disappears after rewind
+✅ PASS: Historical state remains persisted
+\n--- 6. Failure Safety ---
+✅ PASS: Provider failure is caught and returned safely
+✅ PASS: Extraction timeout does not delete the AI message
+✅ PASS: Malformed extraction does not delete the AI message
+✅ PASS: Provider failure does not invalidate successful generation
+✅ PASS: Database state batch failure is caught safely
+✅ PASS: Database state batch failure does not invalidate the generated message
+\n--- 7. Security ---
+✅ PASS: Client cannot choose an arbitrary source message (Enforced in StoryEngine)
+✅ PASS: Client cannot attach a state to another Chronicle's character (Enforced by Triggers)
+✅ PASS: Client cannot modify canonical Story Character fields through extraction (Enforced by ALLOWED_KEYS)
+\n=== Phase 5.3 Test Results: 21 passed, 0 failed ===
+=== Starting Phase 5.2 Dynamic Character State Integration Test Suite ===
+
+--- 1. State Resolution & Nullification ---
+✅ PASS: Resolves latest state on active path
+✅ PASS: Resolves multiple state keys independently
+✅ PASS: Resolves multiple characters independently
+✅ PASS: Handles NULL state values correctly
+✅ PASS: Nullification overrides older values without deleting history
+
+--- 2. Context Integration ---
+✅ PASS: ContextManager includes canonical character definitions
+✅ PASS: ContextManager includes resolved character states
+✅ PASS: Context includes latest state
+✅ PASS: Context correctly suppresses NULL state
+✅ PASS: Context includes other characters
+✅ PASS: Canonical character fields remain unchanged
+
+--- 3. Branch Behavior & Inheritance & Isolation ---
+✅ PASS: Shared ancestor state is inherited by Branch B
+✅ PASS: Branch-specific state overrides shared ancestor state
+✅ PASS: Branch B state is invisible to Branch A
+✅ PASS: Branch A state is invisible to Branch B
+
+--- 4. Rewind Behavior ---
+✅ PASS: Rewind removes future NULL state, revealing previous value
+✅ PASS: Rewind removes future state from active context
+✅ PASS: Rewound state remains persisted in database
+
+--- 5. Database Integrity ---
+✅ PASS: SQLite foreign_key_check is clean
+✅ PASS: SQLite integrity is clean
+
+=== Phase 5.2 Test Results: 20 passed, 0 failed ===
+=== Starting Phase 5.4 Character State Semantics Test Suite ===
+
+--- 1. Schema Metadata ---
+✅ PASS: every supported key has metadata (injured)
+✅ PASS: every supported key has metadata (trust_player)
+✅ PASS: every supported key has metadata (location)
+\n--- 2. Value-Type Validation & Normalization ---
+✅ PASS: invalid key rejected
+✅ PASS: unsupported type rejected (boolean)
+✅ PASS: valid boolean accepted
+✅ PASS: unsupported type rejected (number)
+✅ PASS: invalid numeric range rejected (above max)
+✅ PASS: invalid numeric range rejected (below min)
+✅ PASS: valid number accepted
+✅ PASS: oversized value rejected
+✅ PASS: valid string accepted
+\n--- 3. NULL Semantics ---
+✅ PASS: NULL accepted where allowed (nullable=true)
+✅ PASS: NULL rejected where not allowed (nullable=false)
+\n=== Phase 5.4 Semantics Test Results: 14 passed, 0 failed ===
+\n--- 4. Resolution & Engine Integration ---
+✅ PASS: States resolved
+✅ PASS: latest state wins
+✅ PASS: NULL suppresses previous state
+✅ PASS: static character fields remain separate
+✅ PASS: dynamic state appears in context
+✅ PASS: resolved values only
+✅ PASS: NULL state is hidden from context
+✅ PASS: multiple characters supported in context
+✅ PASS: shared ancestor inheritance
+✅ PASS: branch isolation / hidden branch state absent
+✅ PASS: rewind visibility
+✅ PASS: historical events remain
+=== Starting Phase 5.1 Dynamic Character State Test Suite ===
+
+--- 1. Creation & Validation ---
+✅ PASS: Valid state creation succeeds
+✅ PASS: Missing character fails correctly
+✅ PASS: Cross-chronicle character fails correctly
+
+--- 2. Active-Path Visibility & Resolution & Inheritance ---
+✅ PASS: New state overrides older state on active path
+✅ PASS: Branch B sees inherited state from ancestor, but not divergent state from Branch A
+✅ PASS: Branch B resolves its own state correctly
+✅ PASS: Branch A remains unaffected by Branch B (Isolation)
+✅ PASS: State nullification works while preserving history
+✅ PASS: Can fetch null state directly
+
+--- 3. Rewind Behavior ---
+✅ PASS: Rewind restores previously visible state (healthy)
+✅ PASS: SQLite integrity passes
+✅ PASS: SQLite foreign_key_check is 0
+
+=== Phase 5.1 Test Results: 12 passed, 0 failed ===
+=== Starting Phase 3.1 Ownership & Trust Boundary Hardening Test Suite ===
+
+
+--- 1. Story Card Ownership & Trust Boundary ---
+  ✓ PASS: Creating Story Card for non-existent chronicle throws "Chronicle not found"
+  ✓ PASS: Story Card created successfully with chronicle_id = Chronicle A
+  ✓ PASS: Updating Story Card with mismatched expectedChronicleId is rejected
+  ✓ PASS: Story Card title remains intact after rejected update
+  ✓ PASS: Updating Story Card with matching expectedChronicleId succeeds
+  ✓ PASS: Updating Story Card without expectedChronicleId succeeds by deriving chronicle from card
+  ✓ PASS: Toggling pinned status on Story Card with mismatched chronicle is rejected
+  ✓ PASS: Toggling pinned status with matching chronicle succeeds
+  ✓ PASS: Deleting Story Card with mismatched expectedChronicleId is rejected
+  ✓ PASS: Story Card still exists after rejected delete
+  ✓ PASS: Chronicle A returns strictly its own cards
+  ✓ PASS: Chronicle B returns strictly its own cards
+  ✓ PASS: getChronicleStoryCards throws for non-existent chronicle
+
+--- 2. Memory Creation Ownership & Derivation ---
+  ✓ PASS: Memory creation correctly derived chronicle_id from session_id
+  ✓ PASS: Memory creation with matching chronicle_id succeeds
+  ✓ PASS: Memory creation with mismatched chronicle_id is rejected
+  ✓ PASS: Memory creation for non-existent session is rejected
+  ✓ PASS: Memory creation referencing source message from different session is rejected
+  ✓ PASS: Memory creation referencing valid source message from same session succeeds
+
+--- 3. Memory Deletion Ownership ---
+  ✓ PASS: Deleting non-existent memory throws "Memory not found"
+  ✓ PASS: Deleting memory with mismatched sessionId scope is rejected
+  ✓ PASS: Deleting memory with mismatched chronicleId scope is rejected
+  ✓ PASS: Memory was not deleted after mismatched scope deletion attempt
+  ✓ PASS: Deleting memory with matching scope succeeds
+  ✓ PASS: Memory is deleted after valid scoped delete
+
+--- 4. Memory Read Scoping ---
+  ✓ PASS: getSessionMemories for non-existent session throws 404
+  ✓ PASS: getSessionMemories with mismatched chronicleId throws ownership mismatch
+  ✓ PASS: All returned memories belong strictly to Session A and Chronicle A
+
+--- 5. Generation Route & Context Inspection (Critical Fix) ---
+  ✓ PASS: generateResponse fails when chronicleId and sessionId mismatch
+  ✓ PASS: generateResponse returns statusCode 400 for chronicle mismatch
+  ✓ PASS: Mismatched chronicle updated_at was NOT modified
+  ✓ PASS: Player message was NOT persisted during rejected generation
+  ✓ PASS: generateResponse returns 404 for non-existent session
+  ✓ PASS: contextManager.buildGenerationContext rejects mismatched chronicleId
+  ✓ PASS: contextManager.buildGenerationContext rejects non-existent sessionId
+  ✓ PASS: contextManager correctly derived Chronicle A from Session A
+  ✓ PASS: contextManager diagnostic reflects derived Chronicle A
+
+--- 6. Message Parent Session Integrity (Trigger Enforcement) ---
+  ✓ PASS: Inserting message with parent_message_id in SAME session succeeds
+  ✓ PASS: Cross-session parent message insertion is strictly BLOCKED by SQLite trigger
+  ✓ PASS: Cross-session parent message UPDATE is strictly BLOCKED by SQLite trigger
+
+--- 7. Database Integrity & Foreign Key Check ---
+  ✓ PASS: PRAGMA foreign_key_check is completely clean (0 errors)
+
+=== Test Results: 41 passed, 0 failed ===
+
+=== Starting Phase 4.2 Engine Migration Test Suite ===
+
+--- Test C — Context follows ancestry ---
+✅ PASS: Context includes M1
+✅ PASS: Context includes M2
+✅ PASS: Context includes M3
+✅ PASS: Context excludes sibling
+
+--- Test D — Sibling isolation ---
+✅ PASS: Branch A sees M3
+✅ PASS: Branch A isolated from Sibling
+✅ PASS: Branch B sees Sibling
+✅ PASS: Branch B isolated from M3
+
+--- Test E — Memory branch isolation ---
+✅ PASS: Branch A sees Mem A
+✅ PASS: Branch A does not see Mem B
+✅ PASS: Branch B sees Mem B
+✅ PASS: Branch B does not see Mem A
+
+--- Test F — Ancestor memory inheritance ---
+✅ PASS: Branch A sees ancestor memory
+
+--- Test G — Branch-specific supersession ---
+✅ PASS: Branch A hides superseded memory
+✅ PASS: Branch A sees new memory
+✅ PASS: Branch B still sees original memory
+
+=== Engine Test Results: 16 passed, 0 failed ===
+--- Test J — Stale-head protection ---
+✅ PASS: Stale branch head check caught the concurrent mutation
+=== Starting Phase 4.4 Frontend Integration Test Suite ===
+
+--- 1. Empty Branch Integration ---
+✅ PASS: Generation on empty branch succeeds
+✅ PASS: Session has 2 messages (user + ai)
+✅ PASS: Branch head was established
+✅ PASS: Branch head points to AI message
+
+--- 2. Branch Isolation ---
+✅ PASS: Branch A contains A3
+✅ PASS: Branch A does NOT contain B3
+✅ PASS: Branch B contains B3
+✅ PASS: Branch B does NOT contain A3
+
+--- 3. Edit Flow Integration ---
+✅ PASS: Edit ancestor succeeds
+✅ PASS: Edited alternate path created
+✅ PASS: Old future (B3) is safely ignored from new active path
+
+--- 4. Rewind Flow Integration ---
+✅ PASS: Rewind succeeds
+✅ PASS: Active path head is now M2
+✅ PASS: Archived snapshot created
+✅ PASS: Snapshot preserves the abandoned future
+
+=== Phase 4.4 Test Results: 15 passed, 0 failed ===
+=== Starting Phase 4.3 Branch API Test Suite ===
+
+--- 1. Branch Lifecycle ---
+✅ PASS: Session created
+✅ PASS: Main Timeline exists
+✅ PASS: Branch renamed
+✅ PASS: Alternate branch created
+✅ PASS: Two branches exist
+✅ PASS: Exactly one active branch exists
+✅ PASS: New branch is active
+✅ PASS: Branch 1 activated
+✅ PASS: B1 is active
+✅ PASS: B2 is inactive
+✅ PASS: Inactive branch deleted
+✅ PASS: Branch deleted
+
+--- 2. Fork Isolation & Shared Ancestry ---
+✅ PASS: Branch A sees M6A
+✅ PASS: Branch A does not see M6B
+✅ PASS: Branch B sees M6B
+✅ PASS: Branch B does not see M6A
+✅ PASS: Branch A shares M5
+✅ PASS: Branch B shares M5
+
+--- 3. Memory & Supersession Isolation ---
+✅ PASS: Branch A sees Mem A
+✅ PASS: Branch B does not see Mem A
+✅ PASS: Branch A inherits shared mem
+✅ PASS: Branch B inherits shared mem
+✅ PASS: Branch A suppresses old mem
+✅ PASS: Branch A suppresses old mem correctly
+✅ PASS: Branch B still sees original mem
+
+--- 4. Rewind ---
+✅ PASS: Rewind succeeds
+✅ PASS: Active head = M2
+✅ PASS: M3/M4/M5 still exist
+✅ PASS: Auto-save branch points to M6B
+✅ PASS: New path is M1 -> M2 -> M3B
+✅ PASS: Old M3 not in path
+
+--- 5. Edit ---
+✅ PASS: Edit succeeds
+✅ PASS: Message edited
+✅ PASS: Original message remains unchanged
+✅ PASS: Edited message has same parent
+✅ PASS: Active branch moved to edited node
+
+--- 6. Regeneration ---
+✅ PASS: Leaf regenerate succeeds
+✅ PASS: Content updated
+✅ PASS: Message ID unchanged
+✅ PASS: Generation count increased
+✅ PASS: Ancestor regenerate succeeds
+✅ PASS: Ancestor regen created sibling
+✅ PASS: Branch moved to new sibling
+✅ PASS: Original ancestor unchanged
+
+--- 7. Cross-Session Security ---
+✅ PASS: Fork with msg from another session rejected
+✅ PASS: Rewind to msg from another session rejected
+✅ PASS: Edit msg from another session rejected
+✅ PASS: Regen msg from another session rejected
+
+--- 8. Concurrency / Stale Head ---
+✅ PASS: Stale request failed safely
+
+--- 9. Database Integrity ---
+✅ PASS: foreign_key_check = 0 errors
+✅ PASS: integrity_check = ok
+
+=== Branch API Test Results: 51 passed, 0 failed ===
+=== Starting Phase 5.6 Character State API Test Suite ===
+
+--- Empty Branch Behavior ---
+✅ PASS: 3. Empty branch returns 200 with empty state collection.
+✅ PASS: Empty branch has 0 dynamic states.
+✅ PASS: 2. Non-existent branch returns 404.
+✅ PASS: 1. Existing branch returns its resolved states.
+✅ PASS: 13. Canonical character definition remains unchanged.
+✅ PASS: Multiple states for the same character/key resolve deterministically.
+✅ PASS: 16. Response ordering is deterministic.
+
+--- Branch Isolation ---
+✅ PASS: 7. Branch-local override appears only on its branch (A).
+✅ PASS: Branch-local override appears only on its branch (B).
+✅ PASS: 4. Branch A cannot see Branch B states.
+✅ PASS: 5. Branch B cannot see Branch A states.
+✅ PASS: 6. Shared ancestor state appears on both branches.
+
+--- Rewind & Nullification ---
+✅ PASS: 9. NULL state suppresses ancestral value.
+✅ PASS: 8. Rewind removes future NULL state, revealing ancestral value.
+
+--- Cross-Session Security ---
+✅ PASS: 11. Cross-session branch access is rejected. (Derives correct session based purely on Branch)
+✅ PASS: 18. Foreign-key integrity remains clean.
+
+=== Phase 5.6 API Test Results: 16 passed, 0 failed ===
+=== Starting Phase 5.5 Character State Behavioral Context Test Suite ===
+
+--- 1. Context Construction & Formatting ---
+✅ PASS: 1. Dynamic state appears in generation context.
+✅ PASS: 2. Multiple state keys resolve correctly.
+✅ PASS: 3. Multiple characters resolve independently.
+✅ PASS: 4. Static character data remains separate.
+✅ PASS: 5. State formatting is deterministic (alphabetical sorting).
+✅ PASS: 31. Rules contract exists in context.
+\n--- 2. Branch Isolation ---
+✅ PASS: 6. Branch A sees its own state.
+✅ PASS: 7. Branch B sees its own state.
+✅ PASS: 8. Branch A cannot see Branch B state.
+✅ PASS: 9. Branch B cannot see Branch A state.
+✅ PASS: 10. Shared ancestor state is visible to both branches.
+\n--- 3. Rewind & Nullification ---
+✅ PASS: 14. Descendant nullification suppresses it.
+✅ PASS: Future state is visible.
+✅ PASS: 11. Future state disappears after rewind.
+✅ PASS: 13. Non-null ancestor state is visible.
+✅ PASS: 12. Historical database state remains intact after rewind. (15. Nullification does not delete historical records)
+\n--- 4. Consistency ---
+✅ PASS: 16. alive=false is represented correctly.
+✅ PASS: 17. injured=true is represented correctly.
+✅ PASS: 19. Numeric relationship state is represented correctly.
+✅ PASS: 20. Boolean state is represented correctly.
+\n--- 5. Protection ---
+✅ PASS: 21. Canonical Story Character remains unchanged.
+✅ PASS: 22. Persona remains untouched.
+✅ PASS: 23. Chronicle remains untouched.
+✅ PASS: 24. Sibling state cannot contaminate root context.
+\n--- 6. Generation Integration ---
+✅ PASS: Generation A successful
+✅ PASS: 25. Generation receives the correct branch-local character state.
+✅ PASS: 27. A state generated on a shared ancestor is visible to both branches.
+✅ PASS: 26. A state generated on Branch A is not included when generating on Branch B.
+[StoryEngine Error] Simulated provider failure
+✅ PASS: 28. State-context failure does not destroy the AI message. (Generation fails safely)
+✅ PASS: 29. Existing extraction still runs after successful AI generation.
+✅ PASS: Extraction wrote state
+\n=== Phase 5.5 Behavioral Context Test Results: 31 passed, 0 failed ===
+=== Starting Phase 5.3 Character State Extraction Test Suite ===
+
+--- 1. Valid Extraction ---
+✅ PASS: Explicit injury creates state
+✅ PASS: Injured state persisted correctly
+✅ PASS: Explicit recovery creates null state
+✅ PASS: Injured state nullified correctly
+✅ PASS: Explicit location change creates location state
+✅ PASS: Multiple valid changes are persisted atomically
+\n--- 2. Invalid Extraction ---
+[CharacterStateExtractor] JSON Parse failed: SyntaxError: Expected property name or '}' in JSON at position 2 (line 1 column 3)
+    at JSON.parse (<anonymous>)
+    at Object.extractAndPersistStates (/app/applet/server/story-engine/character-state-extractor.ts:74:25)
+    at async testExtraction (/app/applet/test/character-state-extraction.test.ts:60:19)
+    at async runAll (/app/applet/test/character-state-extraction.test.ts:117:15)
+✅ PASS: Malformed JSON rejected
+✅ PASS: Unknown character rejected
+✅ PASS: Cross-Chronicle character rejected
+✅ PASS: Invalid state key rejected
+✅ PASS: Oversized value rejected
+✅ PASS: Unexpected fields ignored securely
+✅ PASS: Conflicting duplicate state entries rejected
+✅ PASS: Duplicate identical entries are normalized
+\n--- 3. Hallucination Protection ---
+✅ PASS: Unstated state change produces no state (Enforced by Prompt/Mock)
+✅ PASS: Speculative future event produces no state (Enforced by Prompt/Mock)
+✅ PASS: Canonical personality repetition produces no state (Enforced by Prompt/Mock)
+✅ PASS: New character mentioned in narrative is not automatically created (Enforced by Character ID validation)
+\n--- 4. Branch Isolation ---
+✅ PASS: State extracted from Branch B is visible on Branch B
+✅ PASS: Same state is invisible on divergent Branch A
+✅ PASS: Shared ancestor state remains inherited
+\n--- 5. Rewind ---
+✅ PASS: Extracted future state disappears after rewind
+✅ PASS: Historical state remains persisted
+\n--- 6. Failure Safety ---
+[CharacterStateExtractor] Extraction caught error safely: Error: Provider Timeout
+    at Object.generate (/app/applet/test/character-state-extraction.test.ts:192:43)
+    at Object.extractAndPersistStates (/app/applet/server/story-engine/character-state-extractor.ts:65:37)
+    at runAll (/app/applet/test/character-state-extraction.test.ts:194:45)
+✅ PASS: Provider failure is caught and returned safely
+✅ PASS: Extraction timeout does not delete the AI message
+✅ PASS: Malformed extraction does not delete the AI message
+✅ PASS: Provider failure does not invalidate successful generation
+[CharacterStateExtractor] Extraction caught error safely: SqliteError: FOREIGN KEY constraint failed
+    at Object.createCharacterState (/app/applet/server/models/character-state.ts:15:8)
+    at <anonymous> (/app/applet/server/story-engine/character-state-extractor.ts:122:37)
+    at sqliteTransaction (/app/applet/node_modules/better-sqlite3/lib/methods/transaction.js:65:24)
+    at Object.extractAndPersistStates (/app/applet/server/story-engine/character-state-extractor.ts:124:8)
+    at async runAll (/app/applet/test/character-state-extraction.test.ts:210:15) {
+  code: 'SQLITE_CONSTRAINT_FOREIGNKEY'
+}
+✅ PASS: Database state batch failure is caught safely
+✅ PASS: Database state batch failure does not invalidate the generated message
+\n--- 7. Security ---
+✅ PASS: Client cannot choose an arbitrary source message (Enforced in StoryEngine)
+✅ PASS: Client cannot attach a state to another Chronicle's character (Enforced by Triggers)
+✅ PASS: Client cannot modify canonical Story Character fields through extraction (Enforced by ALLOWED_KEYS)
+\n=== Phase 5.3 Test Results: 21 passed, 0 failed ===
+=== Starting Phase 5.2 Dynamic Character State Integration Test Suite ===
+
+--- 1. State Resolution & Nullification ---
+✅ PASS: Resolves latest state on active path
+✅ PASS: Resolves multiple state keys independently
+✅ PASS: Resolves multiple characters independently
+✅ PASS: Handles NULL state values correctly
+✅ PASS: Nullification overrides older values without deleting history
+
+--- 2. Context Integration ---
+✅ PASS: ContextManager includes canonical character definitions
+✅ PASS: ContextManager includes resolved character states
+✅ PASS: Context includes latest state
+✅ PASS: Context correctly suppresses NULL state
+✅ PASS: Context includes other characters
+✅ PASS: Canonical character fields remain unchanged
+
+--- 3. Branch Behavior & Inheritance & Isolation ---
+✅ PASS: Shared ancestor state is inherited by Branch B
+✅ PASS: Branch-specific state overrides shared ancestor state
+✅ PASS: Branch B state is invisible to Branch A
+✅ PASS: Branch A state is invisible to Branch B
+
+--- 4. Rewind Behavior ---
+✅ PASS: Rewind removes future NULL state, revealing previous value
+✅ PASS: Rewind removes future state from active context
+✅ PASS: Rewound state remains persisted in database
+
+--- 5. Database Integrity ---
+✅ PASS: SQLite foreign_key_check is clean
+✅ PASS: SQLite integrity is clean
+
+=== Phase 5.2 Test Results: 20 passed, 0 failed ===
+=== Starting Phase 5.4 Character State Semantics Test Suite ===
+
+--- 1. Schema Metadata ---
+✅ PASS: every supported key has metadata (injured)
+✅ PASS: every supported key has metadata (trust_player)
+✅ PASS: every supported key has metadata (location)
+\n--- 2. Value-Type Validation & Normalization ---
+✅ PASS: invalid key rejected
+✅ PASS: unsupported type rejected (boolean)
+✅ PASS: valid boolean accepted
+✅ PASS: unsupported type rejected (number)
+✅ PASS: invalid numeric range rejected (above max)
+✅ PASS: invalid numeric range rejected (below min)
+✅ PASS: valid number accepted
+✅ PASS: oversized value rejected
+✅ PASS: valid string accepted
+\n--- 3. NULL Semantics ---
+✅ PASS: NULL accepted where allowed (nullable=true)
+✅ PASS: NULL rejected where not allowed (nullable=false)
+\n=== Phase 5.4 Semantics Test Results: 14 passed, 0 failed ===
+\n--- 4. Resolution & Engine Integration ---
+✅ PASS: States resolved
+✅ PASS: latest state wins
+✅ PASS: NULL suppresses previous state
+✅ PASS: static character fields remain separate
+✅ PASS: dynamic state appears in context
+✅ PASS: resolved values only
+✅ PASS: NULL state is hidden from context
+✅ PASS: multiple characters supported in context
+✅ PASS: shared ancestor inheritance
+✅ PASS: branch isolation / hidden branch state absent
+✅ PASS: rewind visibility
+✅ PASS: historical events remain
+=== Starting Phase 5.1 Dynamic Character State Test Suite ===
+
+--- 1. Creation & Validation ---
+✅ PASS: Valid state creation succeeds
+✅ PASS: Missing character fails correctly
+✅ PASS: Cross-chronicle character fails correctly
+
+--- 2. Active-Path Visibility & Resolution & Inheritance ---
+✅ PASS: New state overrides older state on active path
+✅ PASS: Branch B sees inherited state from ancestor, but not divergent state from Branch A
+✅ PASS: Branch B resolves its own state correctly
+✅ PASS: Branch A remains unaffected by Branch B (Isolation)
+✅ PASS: State nullification works while preserving history
+✅ PASS: Can fetch null state directly
+
+--- 3. Rewind Behavior ---
+✅ PASS: Rewind restores previously visible state (healthy)
+✅ PASS: SQLite integrity passes
+✅ PASS: SQLite foreign_key_check is 0
+
+=== Phase 5.1 Test Results: 12 passed, 0 failed ===
+=== Starting Phase 3.1 Ownership & Trust Boundary Hardening Test Suite ===
+
+
+--- 1. Story Card Ownership & Trust Boundary ---
+  ✓ PASS: Creating Story Card for non-existent chronicle throws "Chronicle not found"
+  ✓ PASS: Story Card created successfully with chronicle_id = Chronicle A
+  ✓ PASS: Updating Story Card with mismatched expectedChronicleId is rejected
+  ✓ PASS: Story Card title remains intact after rejected update
+  ✓ PASS: Updating Story Card with matching expectedChronicleId succeeds
+  ✓ PASS: Updating Story Card without expectedChronicleId succeeds by deriving chronicle from card
+  ✓ PASS: Toggling pinned status on Story Card with mismatched chronicle is rejected
+  ✓ PASS: Toggling pinned status with matching chronicle succeeds
+  ✓ PASS: Deleting Story Card with mismatched expectedChronicleId is rejected
+  ✓ PASS: Story Card still exists after rejected delete
+  ✓ PASS: Chronicle A returns strictly its own cards
+  ✓ PASS: Chronicle B returns strictly its own cards
+  ✓ PASS: getChronicleStoryCards throws for non-existent chronicle
+
+--- 2. Memory Creation Ownership & Derivation ---
+  ✓ PASS: Memory creation correctly derived chronicle_id from session_id
+  ✓ PASS: Memory creation with matching chronicle_id succeeds
+  ✓ PASS: Memory creation with mismatched chronicle_id is rejected
+  ✓ PASS: Memory creation for non-existent session is rejected
+  ✓ PASS: Memory creation referencing source message from different session is rejected
+  ✓ PASS: Memory creation referencing valid source message from same session succeeds
+
+--- 3. Memory Deletion Ownership ---
+  ✓ PASS: Deleting non-existent memory throws "Memory not found"
+  ✓ PASS: Deleting memory with mismatched sessionId scope is rejected
+  ✓ PASS: Deleting memory with mismatched chronicleId scope is rejected
+  ✓ PASS: Memory was not deleted after mismatched scope deletion attempt
+  ✓ PASS: Deleting memory with matching scope succeeds
+  ✓ PASS: Memory is deleted after valid scoped delete
+
+--- 4. Memory Read Scoping ---
+  ✓ PASS: getSessionMemories for non-existent session throws 404
+  ✓ PASS: getSessionMemories with mismatched chronicleId throws ownership mismatch
+  ✓ PASS: All returned memories belong strictly to Session A and Chronicle A
+
+--- 5. Generation Route & Context Inspection (Critical Fix) ---
+  ✓ PASS: generateResponse fails when chronicleId and sessionId mismatch
+  ✓ PASS: generateResponse returns statusCode 400 for chronicle mismatch
+  ✓ PASS: Mismatched chronicle updated_at was NOT modified
+  ✓ PASS: Player message was NOT persisted during rejected generation
+  ✓ PASS: generateResponse returns 404 for non-existent session
+  ✓ PASS: contextManager.buildGenerationContext rejects mismatched chronicleId
+  ✓ PASS: contextManager.buildGenerationContext rejects non-existent sessionId
+  ✓ PASS: contextManager correctly derived Chronicle A from Session A
+  ✓ PASS: contextManager diagnostic reflects derived Chronicle A
+
+--- 6. Message Parent Session Integrity (Trigger Enforcement) ---
+  ✓ PASS: Inserting message with parent_message_id in SAME session succeeds
+  ✓ PASS: Cross-session parent message insertion is strictly BLOCKED by SQLite trigger
+  ✓ PASS: Cross-session parent message UPDATE is strictly BLOCKED by SQLite trigger
+
+--- 7. Database Integrity & Foreign Key Check ---
+  ✓ PASS: PRAGMA foreign_key_check is completely clean (0 errors)
+
+=== Test Results: 41 passed, 0 failed ===
+
+file:///app/applet/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2727
+		validateTags(runner.config, suiteTags);
+		                    ^
+
+TypeError: Cannot read properties of undefined (reading 'config')
+    at initSuite (file:///app/applet/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2727:23)
+    at createSuiteCollector (file:///app/applet/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2607:2)
+    at Object.suiteFn (file:///app/applet/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:2811:10)
+    at chain (file:///app/applet/node_modules/vitest/dist/chunks/run.C5UmxDPh.js:1859:14)
+    at <anonymous> (/app/applet/test/phase4.1-database.test.ts:6:1)
+    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:681:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
+
+Node.js v22.23.2
+=== Starting Phase 4.2 Engine Migration Test Suite ===
+
+--- Test C — Context follows ancestry ---
+✅ PASS: Context includes M1
+✅ PASS: Context includes M2
+✅ PASS: Context includes M3
+✅ PASS: Context excludes sibling
+
+--- Test D — Sibling isolation ---
+✅ PASS: Branch A sees M3
+✅ PASS: Branch A isolated from Sibling
+✅ PASS: Branch B sees Sibling
+✅ PASS: Branch B isolated from M3
+
+--- Test E — Memory branch isolation ---
+✅ PASS: Branch A sees Mem A
+✅ PASS: Branch A does not see Mem B
+✅ PASS: Branch B sees Mem B
+✅ PASS: Branch B does not see Mem A
+
+--- Test F — Ancestor memory inheritance ---
+✅ PASS: Branch A sees ancestor memory
+
+--- Test G — Branch-specific supersession ---
+✅ PASS: Branch A hides superseded memory
+✅ PASS: Branch A sees new memory
+✅ PASS: Branch B still sees original memory
+
+=== Engine Test Results: 16 passed, 0 failed ===
+--- Test J — Stale-head protection ---
+[StoryEngine Error] Stale branch head. Branch advanced concurrently while generating.
+✅ PASS: Stale branch head check caught the concurrent mutation
+=== Starting Phase 4.4 Frontend Integration Test Suite ===
+
+--- 1. Empty Branch Integration ---
+✅ PASS: Generation on empty branch succeeds
+✅ PASS: Session has 2 messages (user + ai)
+✅ PASS: Branch head was established
+✅ PASS: Branch head points to AI message
+
+--- 2. Branch Isolation ---
+✅ PASS: Branch A contains A3
+✅ PASS: Branch A does NOT contain B3
+✅ PASS: Branch B contains B3
+✅ PASS: Branch B does NOT contain A3
+
+--- 3. Edit Flow Integration ---
+✅ PASS: Edit ancestor succeeds
+✅ PASS: Edited alternate path created
+✅ PASS: Old future (B3) is safely ignored from new active path
+
+--- 4. Rewind Flow Integration ---
+✅ PASS: Rewind succeeds
+✅ PASS: Active path head is now M2
+✅ PASS: Archived snapshot created
+✅ PASS: Snapshot preserves the abandoned future
+
+=== Phase 4.4 Test Results: 15 passed, 0 failed ===

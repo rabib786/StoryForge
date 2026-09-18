@@ -47,6 +47,15 @@ async function runTests() {
            (?, ?, 'Session B', ?, ?)
   `).run(testSessionA, testChronicleA, now, now, testSessionB, testChronicleB, now, now);
 
+  db.prepare(`
+    INSERT INTO story_branches (id, session_id, name, is_active, created_at, updated_at)
+    VALUES (?, ?, 'Main', 1, ?, ?),
+           (?, ?, 'Main', 1, ?, ?)
+  `).run(
+    crypto.randomBytes(4).toString('hex'), testSessionA, now, now,
+    crypto.randomBytes(4).toString('hex'), testSessionB, now, now
+  );
+
   try {
     // -------------------------------------------------------------
     console.log('\n--- 1. Story Card Ownership & Trust Boundary ---');

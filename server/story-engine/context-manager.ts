@@ -2,13 +2,19 @@ import { getDatabase } from '../db/database.js';
 import { GenerationMessage } from '../providers/types.js';
 import { storyCardEngine, ScoredStoryCard } from './story-card-engine.js';
 import { memoryEngine, ScoredMemory } from './memory-engine.js';
+import { characterStateManager } from '../models/character-state.js';
+import { parseTypedStateValue } from '../models/character-state-schema.js';
 
 export interface StoryContextInput {
   sessionId: string;
+  branchId?: string;
   chronicleId?: string;
   userMessage?: string;
   isOoc?: boolean;
   maxTotalTokens?: number;
+  atMessageId?: string;
+  characterId?: string;
+  characterIds?: string[];
 }
 
 export interface ContextDiagnostic {
@@ -38,6 +44,24 @@ export interface ContextDiagnostic {
   historyMessagesCount: number;
   estimatedTotalTokens: number;
   maxContextBudget: number;
+  resolvedCharacterStatesCount?: number;
+}
+
+export interface ResolvedCharacterStateItem {
+  key: string;
+  value: string | number | boolean;
+  rawValue: string;
+  sourceMessageId?: string;
+  updatedAt?: string;
+}
+
+export interface ResolvedCharacterContext {
+  characterId: string;
+  characterName: string;
+  role?: string;
+  personality?: string;
+  background?: string;
+  states: ResolvedCharacterStateItem[];
 }
 
 export interface PreparedContext {
@@ -45,6 +69,7 @@ export interface PreparedContext {
   messages: GenerationMessage[];
   chronicleTitle: string;
   diagnostic: ContextDiagnostic;
+  resolvedCharacters?: ResolvedCharacterContext[];
 }
 
 export class ContextManager {
@@ -125,19 +150,95 @@ export class ContextManager {
       SELECT * FROM story_characters WHERE chronicle_id = ? ORDER BY sort_order ASC, name ASC
     `).all(derivedChronicleId) as Array<any>;
 
-    // 5. Load Raw Session Messages for history and trigger matching
-    const rawMessages = db.prepare(`
-      SELECT id, sender_type, content, is_ooc, created_at
-      FROM messages
-      WHERE session_id = ?
-      ORDER BY sequence_order ASC, created_at ASC
-    `).all(input.sessionId) as Array<{
+    if (input.characterId) {
+      const char = db.prepare('SELECT id, chronicle_id FROM story_characters WHERE id = ?').get(input.characterId) as any;
+      if (!char) {
+        throw new Error(`Character not found: ${input.characterId}`);
+      }
+      if (char.chronicle_id !== derivedChronicleId) {
+        throw new Error(`Unauthorized character: ${input.characterId} does not belong to chronicle ${derivedChronicleId}`);
+      }
+    }
+    if (input.characterIds && input.characterIds.length > 0) {
+      for (const cid of input.characterIds) {
+        const char = db.prepare('SELECT id, chronicle_id FROM story_characters WHERE id = ?').get(cid) as any;
+        if (!char) {
+          throw new Error(`Character not found: ${cid}`);
+        }
+        if (char.chronicle_id !== derivedChronicleId) {
+          throw new Error(`Unauthorized character: ${cid} does not belong to chronicle ${derivedChronicleId}`);
+        }
+      }
+    }
+
+    // 5. Resolve Branch and Load Raw Session Messages for history
+    let branchId = input.branchId;
+    if (!branchId) {
+      const activeBranch = db.prepare(`SELECT id FROM story_branches WHERE session_id = ? AND is_active = 1`).get(input.sessionId) as { id: string } | undefined;
+      if (!activeBranch) {
+        throw new Error(`No active branch found for session ${input.sessionId}`);
+      }
+      branchId = activeBranch.id;
+    }
+
+    const branch = db.prepare('SELECT id, session_id, head_message_id FROM story_branches WHERE id = ?').get(branchId) as { id: string, session_id: string, head_message_id: string | null } | undefined;
+    if (!branch) {
+      throw new Error(`Story branch not found: ${branchId}`);
+    }
+
+    if (branch.session_id !== input.sessionId) {
+      throw new Error(`Branch ${branchId} does not belong to session ${input.sessionId}`);
+    }
+
+    const narrativePositionId = input.atMessageId || branch.head_message_id;
+    if (input.atMessageId && branch.head_message_id && input.atMessageId !== branch.head_message_id) {
+      const msg = db.prepare('SELECT id, session_id FROM messages WHERE id = ?').get(input.atMessageId) as any;
+      if (!msg || msg.session_id !== input.sessionId) {
+        throw new Error(`Message ${input.atMessageId} does not belong to session ${input.sessionId}`);
+      }
+    }
+
+    let rawMessages: Array<{
       id: string;
       sender_type: string;
       content: string;
       is_ooc: number;
       created_at: string;
-    }>;
+    }> = [];
+
+    if (narrativePositionId) {
+      rawMessages = db.prepare(`
+        WITH RECURSIVE path(depth, id, parent_message_id, sender_type, content, is_ooc, created_at) AS (
+            SELECT
+                0,
+                id,
+                parent_message_id,
+                sender_type,
+                content,
+                is_ooc,
+                created_at
+            FROM messages
+            WHERE id = ?
+            
+            UNION ALL
+            
+            SELECT
+                p.depth + 1,
+                m.id,
+                m.parent_message_id,
+                m.sender_type,
+                m.content,
+                m.is_ooc,
+                m.created_at
+            FROM messages m
+            JOIN path p
+                ON m.id = p.parent_message_id
+        )
+        SELECT id, sender_type, content, is_ooc, created_at
+        FROM path
+        ORDER BY depth DESC;
+      `).all(narrativePositionId) as any;
+    }
 
     // Concatenate recent messages to serve as trigger reference
     const recentSampleForTriggers = rawMessages.slice(-8).map((m) => m.content).join(' ');
@@ -154,6 +255,7 @@ export class ContextManager {
     const { selectedMemories } = memoryEngine.retrieveRelevantMemories({
       chronicleId: derivedChronicleId,
       sessionId: input.sessionId,
+      branchId: branchId,
       maxTokenBudget: 1200,
     });
 
@@ -201,7 +303,85 @@ export class ContextManager {
       const charBlock = storyCharacters.map((c) =>
         `• NPC "${c.name}"${c.title ? ` (${c.title})` : ''}: Role: ${c.role || 'ai'}, Personality: ${c.personality || 'Unknown'}, Background: ${c.background || 'None'}, Speech Style: ${c.speech_style || 'Natural'}, Instructions: ${c.behavior_instructions || ''}`
       ).join('\n');
-      systemParts.push(`[STORY CAST / NPCS]\nYou control these characters:\n${charBlock}`);
+      systemParts.push(`[STATIC STORY CHARACTER INFORMATION]\nYou control these characters:\n${charBlock}`);
+    }
+
+    // [4.1] DYNAMIC CHARACTER STATES
+    const visibleStates = characterStateManager.getVisibleCharacterStates(branchId, input.characterId, narrativePositionId || undefined);
+
+    // Group active states by character
+    const stateMap = new Map<string, Array<{ key: string; value: any; rawValue: string; sourceMessageId?: string; updatedAt?: string }>>();
+    for (const state of visibleStates) {
+      if (state.state_value !== null) {
+        if (!stateMap.has(state.character_id)) stateMap.set(state.character_id, []);
+        const typedVal = parseTypedStateValue(state.state_key, state.state_value);
+        stateMap.get(state.character_id)!.push({
+          key: state.state_key,
+          value: typedVal,
+          rawValue: state.state_value,
+          sourceMessageId: state.source_message_id,
+          updatedAt: state.updated_at,
+        });
+      }
+    }
+
+    // Determine characters to represent
+    let relevantStoryCharacters = [...storyCharacters];
+    if (input.characterIds && input.characterIds.length > 0) {
+      relevantStoryCharacters = storyCharacters.filter(c => input.characterIds!.includes(c.id));
+    } else if (input.characterId) {
+      relevantStoryCharacters = storyCharacters.filter(c => c.id === input.characterId);
+    }
+
+    // Sort characters deterministically: sort_order ASC, name ASC, id ASC
+    relevantStoryCharacters.sort((a, b) => {
+      const orderDiff = (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      if (orderDiff !== 0) return orderDiff;
+      const nameDiff = a.name.localeCompare(b.name);
+      if (nameDiff !== 0) return nameDiff;
+      return a.id.localeCompare(b.id);
+    });
+
+    const resolvedCharacters: ResolvedCharacterContext[] = [];
+    for (const char of relevantStoryCharacters) {
+      const rawStates = stateMap.get(char.id) || [];
+      // Deterministically sort state keys by key ASC
+      rawStates.sort((a, b) => a.key.localeCompare(b.key));
+      resolvedCharacters.push({
+        characterId: char.id,
+        characterName: char.name,
+        role: char.role,
+        personality: char.personality,
+        background: char.background,
+        states: rawStates.map(s => ({
+          key: s.key,
+          value: s.value,
+          rawValue: s.rawValue,
+          sourceMessageId: s.sourceMessageId,
+          updatedAt: s.updatedAt,
+        })),
+      });
+    }
+
+    const charsWithState = resolvedCharacters.filter(c => c.states.length > 0);
+
+    if (charsWithState.length > 0) {
+      let stateBlock = `[DYNAMIC CHARACTER STATES]\nThe following states reflect timeline-specific facts for the current story branch:\n`;
+      for (const char of charsWithState) {
+        const stateLines = char.states.map(s => `  - ${s.key}: ${s.value}`).join('\n');
+        stateBlock += `• ${char.characterName}:\n${stateLines}\n`;
+      }
+      stateBlock += `\n\n[DYNAMIC CHARACTER STATE RULES]\n` +
+        `Dynamic character states represent the current narrative reality of the active timeline.\n` +
+        `Treat these states as established facts unless the current narrative explicitly changes them.\n` +
+        `Do not silently contradict an established state.\n` +
+        `Do not invent state changes that did not occur in the narrative.\n` +
+        `A state may change only as a consequence of the current story.\n` +
+        `Dynamic state applies only to the characters and timeline represented in the current context.\n` +
+        `Do not transfer state information from another branch or timeline.\n` +
+        `Canonical character information remains distinct from dynamic state.`;
+        
+      systemParts.push(stateBlock.trim());
     }
 
     // [5] RELEVANT STORY CARDS (Retrieved Lore)
@@ -249,6 +429,12 @@ export class ContextManager {
 
       for (let i = rawMessages.length - 1; i >= 0; i--) {
         const m = rawMessages[i];
+
+        // Phase 5.9: Filter out internal system events such as Phase 5.8 [Character State Mutation]
+        if (m.sender_type === 'system' || m.content.startsWith('[Character State Mutation]')) {
+          continue;
+        }
+
         const content = m.is_ooc ? `((OOC: ${m.content}))` : m.content;
         const msgTokens = Math.ceil(content.length / 4);
 
@@ -307,6 +493,7 @@ export class ContextManager {
       historyMessagesCount: messages.length,
       estimatedTotalTokens: totalEstimatedTokens,
       maxContextBudget: maxBudget,
+      resolvedCharacterStatesCount: charsWithState.reduce((acc, c) => acc + c.states.length, 0),
     };
 
     return {
@@ -314,6 +501,7 @@ export class ContextManager {
       messages,
       chronicleTitle: chronicle.title,
       diagnostic,
+      resolvedCharacters,
     };
   }
 }

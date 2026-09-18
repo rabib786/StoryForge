@@ -163,3 +163,101 @@ export interface DatabaseStats {
   chats: number;
   messages: number;
 }
+
+export interface Branch {
+  id: string;
+  session_id: string;
+  name: string;
+  head_message_id: string | null;
+  is_active: number;
+  is_archived: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CharacterState {
+  id: string;
+  character_id: string;
+  source_message_id: string;
+  state_key: string;
+  state_value: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CharacterStateValue {
+  key: string;
+  value: string | number | boolean;
+  sourceMessageId?: string;
+  updatedAt?: string;
+}
+
+export interface CharacterStateCharacter {
+  characterId: string;
+  characterName: string;
+  role?: string;
+  background?: string;
+  personality?: string;
+  states: CharacterStateValue[];
+}
+
+export interface CharacterStateResponse {
+  branchId: string;
+  sessionId: string;
+  characters: CharacterStateCharacter[];
+}
+
+export interface CharacterStateProposal {
+  id: string;
+  chronicle_id: string;
+  session_id: string;
+  branch_id: string;
+  character_id: string;
+  character_name?: string;
+  source_message_id: string;
+  state_key: string;
+  proposed_value: string | null;
+  reason?: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  applied_state_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ConsistencyStatus =
+  | 'consistent'
+  | 'potential_conflict'
+  | 'contradiction'
+  | 'insufficient_evidence';
+
+export interface ConsistencyFinding {
+  status: ConsistencyStatus;
+  characterId: string;
+  characterName?: string;
+  stateKey?: string;
+  canonicalValue?: boolean | number | string | null;
+  observedValue?: boolean | number | string | null;
+  proposedValue?: boolean | number | string | null;
+  sourceMessageId: string;
+  branchId: string;
+  narrativePosition: string;
+  reason: string;
+}
+
+export interface ConsistencySummary {
+  totalFindings: number;
+  contradictions: number;
+  potentialConflicts: number;
+  consistent: number;
+  insufficientEvidence: number;
+}
+
+export interface ConsistencyAnalysisResponse {
+  branchId: string;
+  sessionId: string;
+  atMessageId: string;
+  findings: ConsistencyFinding[];
+  summary: ConsistencySummary;
+}
+
+

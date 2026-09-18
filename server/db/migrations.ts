@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { getDatabase } from './database.js';
 
 export function runMigrations(): void {
@@ -758,6 +759,57 @@ export function runMigrations(): void {
     console.log('[Migration] 006_message_parent_session_integrity applied successfully.');
   }
 
+  // Migration 008: Phase 5.1 Dynamic Character State
+  const m8 = db.prepare('SELECT version FROM schema_migrations WHERE version = ?').get('008_character_states');
+  if (!m8) {
+    console.log('[Migration] Applying 008_character_states...');
+    db.exec('PRAGMA foreign_keys = OFF;');
+    db.transaction(() => {
+      const now = new Date().toISOString();
+      
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS character_states (
+            id TEXT PRIMARY KEY,
+            character_id TEXT NOT NULL REFERENCES story_characters(id) ON DELETE CASCADE,
+            source_message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+            state_key TEXT NOT NULL,
+            state_value TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_character_states_character ON character_states(character_id);
+        CREATE INDEX IF NOT EXISTS idx_character_states_source ON character_states(source_message_id);
+        
+        CREATE TRIGGER IF NOT EXISTS trg_character_states_chronicle_check_insert
+        BEFORE INSERT ON character_states
+        FOR EACH ROW
+        BEGIN
+          SELECT RAISE(ABORT, 'Cross-chronicle character state relationship is forbidden')
+          WHERE (SELECT chronicle_id FROM story_characters WHERE id = NEW.character_id) != 
+                (SELECT chronicle_id FROM story_sessions WHERE id = (SELECT session_id FROM messages WHERE id = NEW.source_message_id));
+        END;
+        
+        CREATE TRIGGER IF NOT EXISTS trg_character_states_chronicle_check_update
+        BEFORE UPDATE OF character_id, source_message_id ON character_states
+        FOR EACH ROW
+        BEGIN
+          SELECT RAISE(ABORT, 'Cross-chronicle character state relationship is forbidden')
+          WHERE (SELECT chronicle_id FROM story_characters WHERE id = NEW.character_id) != 
+                (SELECT chronicle_id FROM story_sessions WHERE id = (SELECT session_id FROM messages WHERE id = NEW.source_message_id));
+        END;
+      `);
+      
+      db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run('008_character_states', now);
+    })();
+    db.exec('PRAGMA foreign_keys = ON;');
+    const fkErrors = db.pragma('foreign_key_check') as unknown[];
+    if (fkErrors && fkErrors.length > 0) {
+      throw new Error(`Foreign key check failed after 008_character_states: ${JSON.stringify(fkErrors)}`);
+    }
+    console.log('[Migration] 008_character_states applied successfully.');
+  }
+
   // Migration 007: Phase 4.1 Branch/Message Tree Foundation
   const m7 = db.prepare('SELECT version FROM schema_migrations WHERE version = ?').get('007_branch_architecture');
   if (!m7) {
@@ -765,7 +817,7 @@ export function runMigrations(): void {
     db.exec('PRAGMA foreign_keys = OFF;');
     db.transaction(() => {
       const now = new Date().toISOString();
-      const crypto = require('crypto'); // Ensure crypto is available
+      
 
       // 1. Create story_branches table
       db.exec(`
@@ -933,6 +985,89 @@ export function runMigrations(): void {
       throw new Error(`Foreign key check failed after 007_branch_architecture: ${JSON.stringify(fkErrors)}`);
     }
     console.log('[Migration] 007_branch_architecture applied successfully.');
+  }
+
+  // Migration 009: Phase 5.10 Character State Proposals
+  const m9 = db.prepare('SELECT version FROM schema_migrations WHERE version = ?').get('009_character_state_proposals');
+  if (!m9) {
+    console.log('[Migration] Applying 009_character_state_proposals...');
+    db.exec('PRAGMA foreign_keys = OFF;');
+    db.transaction(() => {
+      const now = new Date().toISOString();
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS character_state_proposals (
+            id TEXT PRIMARY KEY,
+            chronicle_id TEXT NOT NULL REFERENCES chronicles(id) ON DELETE CASCADE,
+            session_id TEXT NOT NULL REFERENCES story_sessions(id) ON DELETE CASCADE,
+            branch_id TEXT NOT NULL REFERENCES story_branches(id) ON DELETE CASCADE,
+            character_id TEXT NOT NULL REFERENCES story_characters(id) ON DELETE CASCADE,
+            source_message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+            state_key TEXT NOT NULL,
+            proposed_value TEXT,
+            reason TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            applied_state_id TEXT REFERENCES character_states(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            CHECK (status IN ('pending', 'approved', 'rejected'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_proposals_branch ON character_state_proposals(branch_id, status);
+        CREATE INDEX IF NOT EXISTS idx_proposals_source ON character_state_proposals(source_message_id);
+        CREATE INDEX IF NOT EXISTS idx_proposals_character ON character_state_proposals(character_id);
+
+        CREATE TRIGGER IF NOT EXISTS trg_proposals_chronicle_check_insert
+        BEFORE INSERT ON character_state_proposals
+        FOR EACH ROW
+        BEGIN
+          SELECT RAISE(ABORT, 'Cross-chronicle character state proposal relationship is forbidden')
+          WHERE (SELECT chronicle_id FROM story_characters WHERE id = NEW.character_id) != 
+                (SELECT chronicle_id FROM story_sessions WHERE id = NEW.session_id);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_proposals_chronicle_check_update
+        BEFORE UPDATE OF character_id, session_id ON character_state_proposals
+        FOR EACH ROW
+        BEGIN
+          SELECT RAISE(ABORT, 'Cross-chronicle character state proposal relationship is forbidden')
+          WHERE (SELECT chronicle_id FROM story_characters WHERE id = NEW.character_id) != 
+                (SELECT chronicle_id FROM story_sessions WHERE id = NEW.session_id);
+        END;
+      `);
+
+      db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run('009_character_state_proposals', now);
+    })();
+    db.exec('PRAGMA foreign_keys = ON;');
+    const fkErrors = db.pragma('foreign_key_check') as unknown[];
+    if (fkErrors && fkErrors.length > 0) {
+      throw new Error(`Foreign key check failed after 009_character_state_proposals: ${JSON.stringify(fkErrors)}`);
+    }
+    console.log('[Migration] 009_character_state_proposals applied successfully.');
+  }
+
+  // Migration 010: User Ownership & Chronicle Access Control
+  const m10 = db.prepare('SELECT version FROM schema_migrations WHERE version = ?').get('010_user_ownership');
+  if (!m10) {
+    console.log('[Migration] Applying 010_user_ownership...');
+    db.exec('PRAGMA foreign_keys = OFF;');
+    db.transaction(() => {
+      const now = new Date().toISOString();
+      const chronicleCols = db.prepare("PRAGMA table_info(chronicles)").all() as any[];
+      if (!chronicleCols.some(c => c.name === 'user_id')) {
+        db.exec(`
+          ALTER TABLE chronicles ADD COLUMN user_id TEXT;
+          CREATE INDEX IF NOT EXISTS idx_chronicles_user ON chronicles(user_id);
+        `);
+      }
+      db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run('010_user_ownership', now);
+    })();
+    db.exec('PRAGMA foreign_keys = ON;');
+    const fkErrors = db.pragma('foreign_key_check') as unknown[];
+    if (fkErrors && fkErrors.length > 0) {
+      throw new Error(`Foreign key check failed after 010_user_ownership: ${JSON.stringify(fkErrors)}`);
+    }
+    console.log('[Migration] 010_user_ownership applied successfully.');
   }
 
 }

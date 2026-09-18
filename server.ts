@@ -7,11 +7,13 @@ import { chroniclesRouter } from './server/routes/chronicles.js';
 import { personasRouter } from './server/routes/personas.js';
 import { storyCharactersRouter } from './server/routes/story-characters.js';
 import { sessionsRouter } from './server/routes/story-sessions.js';
+import { branchesRouter } from './server/routes/story-branches.js';
 import { storyRouter } from './server/routes/story.js';
 import { settingsRouter } from './server/routes/settings.js';
 import { providersRouter } from './server/routes/providers.js';
 import { storyCardsRouter } from './server/routes/story-cards.js';
 import { memoriesRouter } from './server/routes/memories.js';
+import { proposalsRouter } from './server/routes/proposals.js';
 
 dotenv.config();
 
@@ -46,11 +48,13 @@ async function startServer() {
   app.use('/api/personas', personasRouter);
   app.use('/api/story-characters', storyCharactersRouter);
   app.use('/api/sessions', sessionsRouter);
+  app.use('/api/branches', branchesRouter);
   app.use('/api/story', storyRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/providers', providersRouter);
   app.use('/api/story-cards', storyCardsRouter);
   app.use('/api/memories', memoriesRouter);
+  app.use('/api/proposals', proposalsRouter);
 
   // Serve Vite in development or static build in production
   if (process.env.NODE_ENV !== 'production') {

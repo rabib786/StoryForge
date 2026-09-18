@@ -22,9 +22,15 @@ import {
   X,
   Layers,
   Eye,
+  GitBranch,
+  GitFork,
+  Play,
 } from 'lucide-react';
 import { Chronicle, StorySession, Message, Persona, StoryCharacter, Memory, ContextDiagnostic } from '../types';
 import { api } from '../services/api';
+import { BranchNavigator } from './BranchNavigator';
+import { CharacterStatePanel } from './CharacterStatePanel';
+
 
 interface SessionViewProps {
   chronicleId: string;
@@ -41,6 +47,10 @@ export const SessionView: React.FC<SessionViewProps> = ({
 }) => {
   const [session, setSession] = useState<StorySession | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [branches, setBranches] = useState<import('../types').Branch[]>([]);
+  const [activeBranchId, setActiveBranchId] = useState<string | null>(null);
+  const [showBranches, setShowBranches] = useState(false);
+  const [branchLoading, setBranchLoading] = useState(false);
   const [chronicle, setChronicle] = useState<Chronicle | null>(null);
   const [chronicleCharacters, setChronicleCharacters] = useState<StoryCharacter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +60,8 @@ export const SessionView: React.FC<SessionViewProps> = ({
   // Memories & Diagnostic State
   const [memories, setMemories] = useState<Memory[]>([]);
   const [showInspector, setShowInspector] = useState(false);
-  const [inspectorTab, setInspectorTab] = useState<'memories' | 'cards' | 'budget'>('memories');
+  const [characterStatesRefreshTrigger, setCharacterStatesRefreshTrigger] = useState(0);
+  const [inspectorTab, setInspectorTab] = useState<'memories' | 'cards' | 'budget' | 'characters'>('memories');
   const [diagnostic, setDiagnostic] = useState<ContextDiagnostic | null>(null);
   const [loadingDiagnostic, setLoadingDiagnostic] = useState(false);
 
@@ -84,9 +95,9 @@ export const SessionView: React.FC<SessionViewProps> = ({
   };
 
   // Load chat and messages
-  const loadChatData = async () => {
+  const loadChatData = async (switchBranchId?: string) => {
     try {
-      setLoading(true);
+      if (!switchBranchId) setLoading(true);
       setError(null);
 
       // Load chronicle first
@@ -106,15 +117,100 @@ export const SessionView: React.FC<SessionViewProps> = ({
       }
 
       if (targetSessionId) {
+        if (switchBranchId) {
+          await api.activateBranch(switchBranchId);
+        }
+      
         const sessionData = await api.getSession(targetSessionId);
         setSession(sessionData.session);
         setMessages(sessionData.messages);
         loadMemories(targetSessionId, chronicleId);
+        
+        const branchData = await api.getBranches(targetSessionId);
+        setBranches(branchData.branches);
+        const active = branchData.branches.find((b: any) => b.is_active);
+        if (active) setActiveBranchId(active.id);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (!switchBranchId) setLoading(false);
+      setBranchLoading(false);
+    }
+  };
+  
+  const handleSwitchBranch = async (branchId: string) => {
+    if (branchId === activeBranchId) return;
+    setBranchLoading(true);
+    await loadChatData(branchId);
+  };
+
+  const handleForkBranch = async (messageId?: string, name?: string) => {
+    if (!activeBranchId) return;
+    setBranchLoading(true);
+    try {
+      await api.createBranch(activeBranchId, messageId, name);
+      await loadChatData();
+    } catch(e: any) {
+      setError(e.message);
+      setBranchLoading(false);
+    }
+  };
+
+  const handleRenameBranch = async (branchId: string, name: string) => {
+    try {
+      await api.renameBranch(branchId, name);
+      if (session) {
+        const branchData = await api.getBranches(session.id);
+        setBranches(branchData.branches);
+      }
+    } catch(e: any) {
+      setError(e.message);
+    }
+  };
+
+  const handleDeleteBranch = async (branchId: string) => {
+    if (!confirm('Delete this timeline pointer? Messages might still exist on other timelines.')) return;
+    try {
+      await api.deleteBranch(branchId);
+      if (session) {
+        if (activeBranchId === branchId) {
+           await loadChatData(); // Switch to another active branch implicitly
+        } else {
+           const branchData = await api.getBranches(session.id);
+           setBranches(branchData.branches);
+        }
+      }
+    } catch(e: any) {
+      setError(e.message);
+    }
+  };
+  
+  const handleRewindBranch = async (messageId: string) => {
+    if (!activeBranchId) return;
+    if (!confirm('Rewind timeline to this point? Your current future will be preserved as an archived snapshot.')) return;
+    setBranchLoading(true);
+    try {
+      await api.rewindBranch(activeBranchId, messageId);
+      await loadChatData();
+    } catch(e: any) {
+      setError(e.message);
+      setBranchLoading(false);
+    }
+  };
+  
+  const handleRegenerateMessage = async (messageId: string) => {
+    if (!activeBranchId) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      await api.branchRegenerateMessage(activeBranchId, messageId);
+      await loadChatData();
+    } catch(e: any) {
+      setError(e.message);
+    } finally {
+      setGenerating(false);
+      setCharacterStatesRefreshTrigger(prev => prev + 1);
     }
   };
 
@@ -172,6 +268,7 @@ export const SessionView: React.FC<SessionViewProps> = ({
     try {
       const res = await api.generateStory({
         sessionId: session.id,
+        branchId: activeBranchId || undefined,
         chronicleId: chronicle.id,
         userMessage: finalPrompt,
         isOoc,
@@ -186,9 +283,7 @@ export const SessionView: React.FC<SessionViewProps> = ({
       }
 
       // Reload fresh messages and memories from DB
-      const updatedChat = await api.getSession(session.id);
-      setMessages(updatedChat.messages);
-      loadMemories(session.id, chronicle.id);
+      await loadChatData();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -209,15 +304,16 @@ export const SessionView: React.FC<SessionViewProps> = ({
   };
 
   const handleSaveEdit = async () => {
-    if (!editingMessage || !session) return;
+    if (!editingMessage || !session || !activeBranchId) return;
+    if (!confirm('Your edit will create an alternate path. The existing timeline will remain preserved. Continue?')) return;
     try {
-      await api.editMessage(session.id, editingMessage.id, editContent);
-      setMessages((prev) =>
-        prev.map((m) => (m.id === editingMessage.id ? { ...m, content: editContent } : m))
-      );
+      setBranchLoading(true);
+      await api.branchEditMessage(activeBranchId, editingMessage.id, editContent);
+      await loadChatData();
       setEditingMessage(null);
     } catch (err: unknown) {
       alert(`Error saving edit: ${err instanceof Error ? err.message : String(err)}`);
+      setBranchLoading(false);
     }
   };
 
@@ -303,8 +399,18 @@ export const SessionView: React.FC<SessionViewProps> = ({
           </div>
         </div>
 
-        {/* Context & Memory Inspector Button */}
+        
+        {/* Branch / Timeline Button */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowBranches(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 hover:border-amber-500/50 text-slate-300 hover:text-amber-300 text-xs font-semibold transition shadow-sm"
+          >
+            <GitBranch className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">{branches.find(b => b.id === activeBranchId)?.name || 'Timelines'}</span>
+          </button>
+        
+          {/* Context & Memory Inspector Button */}
           <button
             onClick={handleOpenInspector}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 hover:border-amber-500/50 text-slate-300 hover:text-amber-300 text-xs font-semibold transition shadow-sm"
@@ -343,6 +449,13 @@ export const SessionView: React.FC<SessionViewProps> = ({
           </div>
         )}
 
+        {messages.length === 0 && !generating && (
+          <div className="flex flex-col items-center justify-center text-center py-20 opacity-60">
+            <BookOpen className="w-12 h-12 text-slate-500 mb-3" />
+            <p className="text-slate-400 font-medium">No messages yet.</p>
+            <p className="text-slate-500 text-sm mt-1">Start the story...</p>
+          </div>
+        )}
         {messages.map((msg, index) => {
           const isUser = msg.sender_type === 'user';
           const isAi = msg.sender_type === 'ai';
@@ -403,20 +516,42 @@ export const SessionView: React.FC<SessionViewProps> = ({
                 >
                   {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 </button>
+                
+                {isAi && (
+                  <button
+                    onClick={() => handleRegenerateMessage(msg.id)}
+                    title="Regenerate"
+                    className="p-1 rounded text-slate-500 hover:text-amber-400 hover:bg-slate-800 transition"
+                  >
+                    <Play className="w-3 h-3" />
+                  </button>
+                )}
+                
                 <button
                   onClick={() => handleStartEdit(msg)}
-                  title="Edit passage"
+                  title="Edit alternate path"
                   className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition"
                 >
                   <Edit2 className="w-3 h-3" />
                 </button>
+                
                 <button
-                  onClick={() => handleDeleteMessage(msg.id)}
-                  title="Delete passage"
-                  className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition"
+                  onClick={() => handleForkBranch(msg.id)}
+                  title="Fork timeline from here"
+                  className="p-1 rounded text-slate-500 hover:text-emerald-400 hover:bg-slate-800 transition"
                 >
-                  <Trash2 className="w-3 h-3" />
+                  <GitFork className="w-3 h-3" />
                 </button>
+                
+                {index < messages.length - 1 && (
+                  <button
+                    onClick={() => handleRewindBranch(msg.id)}
+                    title="Rewind timeline to this point"
+                    className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -499,6 +634,24 @@ export const SessionView: React.FC<SessionViewProps> = ({
         </div>
       </footer>
 
+
+      <BranchNavigator 
+        branches={branches}
+        activeBranchId={activeBranchId}
+        isOpen={showBranches}
+        onClose={() => setShowBranches(false)}
+        onSwitchBranch={handleSwitchBranch}
+        onRenameBranch={handleRenameBranch}
+        onDeleteBranch={handleDeleteBranch}
+      />
+      {branchLoading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="text-amber-400 flex items-center gap-2 font-medium bg-slate-900 px-4 py-2 rounded-xl shadow-xl border border-slate-800">
+            <RotateCcw className="w-4 h-4 animate-spin" /> Swapping Timelines...
+          </div>
+        </div>
+      )}
+      
       {/* Edit Message Modal */}
       {editingMessage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
@@ -568,6 +721,17 @@ export const SessionView: React.FC<SessionViewProps> = ({
               >
                 Active Story Cards ({diagnostic?.selectedStoryCards?.length ?? 0})
               </button>
+              <button
+                onClick={() => setInspectorTab('characters')}
+                className={`pb-2.5 font-semibold transition border-b-2 ${
+                  inspectorTab === 'characters'
+                    ? 'border-amber-400 text-amber-300'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Character States
+              </button>
+
               <button
                 onClick={() => setInspectorTab('budget')}
                 className={`pb-2.5 font-semibold transition border-b-2 ${

@@ -1,4 +1,5 @@
 import {
+  Branch,
   Chronicle,
   Persona, StoryCharacter,
   StorySession,
@@ -9,6 +10,9 @@ import {
   LLMProviderData,
   AppSettings,
   DatabaseStats,
+  CharacterStateResponse,
+  CharacterStateProposal,
+  ConsistencyAnalysisResponse,
 } from '../types';
 
 export const api = {
@@ -136,6 +140,148 @@ export const api = {
     return res.json();
   },
 
+
+  // --- Branches ---
+  async getCharacterStates(branchId: string, atMessageId?: string): Promise<CharacterStateResponse> {
+    const url = atMessageId 
+      ? `/api/branches/${branchId}/character-states?atMessageId=${encodeURIComponent(atMessageId)}`
+      : `/api/branches/${branchId}/character-states`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Failed to load character states');
+    return res.json();
+  },
+  async getBranchProposals(branchId: string, status?: string): Promise<{ proposals: CharacterStateProposal[] }> {
+    const url = status
+      ? `/api/branches/${branchId}/proposals?status=${encodeURIComponent(status)}`
+      : `/api/branches/${branchId}/proposals`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Failed to load character state proposals');
+    return res.json();
+  },
+  async approveProposal(proposalId: string, branchId?: string): Promise<{ success: boolean; proposal: CharacterStateProposal; state: any }> {
+    const res = await fetch(`/api/proposals/${proposalId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ branchId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to approve proposal');
+    }
+    return res.json();
+  },
+  async rejectProposal(proposalId: string, branchId?: string): Promise<{ success: boolean; proposal: CharacterStateProposal }> {
+    const res = await fetch(`/api/proposals/${proposalId}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ branchId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to reject proposal');
+    }
+    return res.json();
+  },
+  async mutateBranchCharacterState(branchId: string, characterId: string, stateKey: string, value: any): Promise<{ state: any }> {
+    const res = await fetch(`/api/branches/${branchId}/character-states`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ characterId, stateKey, value }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to mutate character state');
+    }
+    return res.json();
+  },
+  async analyzeBranchConsistency(
+    branchId: string,
+    options?: {
+      atMessageId?: string;
+      narrativeText?: string;
+      chronicleId?: string;
+      userId?: string;
+    }
+  ): Promise<ConsistencyAnalysisResponse> {
+    const res = await fetch(`/api/branches/${branchId}/consistency/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options?.userId ? { 'x-user-id': options.userId } : {}),
+      },
+      body: JSON.stringify(options || {}),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to analyze consistency');
+    }
+    return res.json();
+  },
+  async getBranches(sessionId: string): Promise<{ branches: Branch[] }> {
+    const res = await fetch(`/api/sessions/${sessionId}/branches`);
+    if (!res.ok) throw new Error('Failed to load branches');
+    return res.json();
+  },
+  async createBranch(branchId: string, messageId?: string, name?: string): Promise<{ branch: Branch }> {
+    const res = await fetch(`/api/branches/${branchId}/fork`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId, name }),
+    });
+    if (!res.ok) throw new Error('Failed to fork branch');
+    return res.json();
+  },
+  async activateBranch(branchId: string): Promise<{ branch: Branch }> {
+    const res = await fetch(`/api/branches/${branchId}/active`, { method: 'PUT' });
+    if (!res.ok) throw new Error('Failed to activate branch');
+    return res.json();
+  },
+  async renameBranch(branchId: string, name: string): Promise<{ branch: Branch }> {
+    const res = await fetch(`/api/branches/${branchId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw new Error('Failed to rename branch');
+    return res.json();
+  },
+  async deleteBranch(branchId: string): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/branches/${branchId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to delete branch');
+    }
+    return res.json();
+  },
+  async rewindBranch(branchId: string, targetMessageId: string): Promise<{ branch: Branch }> {
+    const res = await fetch(`/api/branches/${branchId}/rewind`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetMessageId }),
+    });
+    if (!res.ok) throw new Error('Failed to rewind branch');
+    return res.json();
+  },
+  async branchEditMessage(branchId: string, messageId: string, content: string): Promise<{ message: Message }> {
+    const res = await fetch(`/api/branches/${branchId}/messages/${messageId}/edit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    if (!res.ok) throw new Error('Failed to edit message on branch');
+    return res.json();
+  },
+  async branchRegenerateMessage(branchId: string, messageId: string): Promise<{ message: Message }> {
+    const res = await fetch(`/api/branches/${branchId}/messages/${messageId}/regenerate`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to regenerate message');
+    }
+    return res.json();
+  },
+  
   // Chats & Messages
   async getSession(id: string): Promise<{
     session: StorySession;
@@ -269,6 +415,7 @@ export const api = {
   // Story Generation
   async generateStory(options: {
     sessionId: string;
+    branchId?: string;
     chronicleId: string;
     userMessage?: string;
     isOoc?: boolean;
